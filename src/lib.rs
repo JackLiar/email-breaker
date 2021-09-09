@@ -1,5 +1,5 @@
 use nom::bytes::streaming::{take, take_till1};
-use nom::character::complete::{multispace0, not_line_ending};
+use nom::character::complete::{line_ending, multispace0, not_line_ending};
 use nom::character::is_newline;
 use nom::error::{make_error, ErrorKind};
 use nom::number::complete::u8;
@@ -80,25 +80,22 @@ impl EmailBreaker {
     /// Parse email headers
     pub fn parse_headers<'a, 'b>(
         &'a self,
-        mut data: &'b [u8],
+        data: &'b [u8],
     ) -> IResult<&'b [u8], Vec<MailHeader<'b>>> {
         let mut headers = vec![];
+        let (mut data, header) = self.parse_header(data)?;
+        headers.push(header);
+
         while data.len() > 0 {
-            if data[0] == b'\r' {
-                let (remain, crlf) = take(2usize)(data)?;
-                if crlf[1] != b'\n' {
-                    return Err(nom::Err::Error(make_error(data, ErrorKind::CrLf)));
+            match line_ending::<_, nom::error::Error<&[u8]>>(data) {
+                Ok((remain, _)) => {
+                    data = remain;
+                    break;
                 }
-                data = remain;
-                break;
-            } else if data[0] == b'\n' {
-                let (remain, _) = take(1usize)(data)?;
-                data = remain;
-                break;
-            }
+                Err(_) => {}
+            };
 
             let (remain, header) = self.parse_header(data)?;
-            self.parse_header(data)?;
             data = remain;
             headers.push(header);
         }
@@ -130,12 +127,37 @@ mod test {
     }
 
     #[test]
-    fn multi_line_value<'a>() {
+    fn multi_line_value() {
         let breaker = EmailBreaker::default();
         let (_, header) = breaker
             .parse_header(b"Key: Value1\n  Value2\n   Value3\r\n")
             .unwrap();
         assert_eq!(header.key, b"Key");
         assert_eq!(header.value, b"Value1\n  Value2\n   Value3");
+    }
+
+    #[test]
+    fn headers() {
+        let breaker = EmailBreaker::default();
+        let (remain, headers) = breaker
+            .parse_headers(
+                concat!(
+                    "Subject: This is a test email\r\n",
+                    "Content-Type: multipart/alternative; boundary=foobar\r\n",
+                    "Date: Sun, 02 Oct 2016 07:06:22 -0700 (PDT)\r\n",
+                    "\r\n"
+                )
+                .as_bytes(),
+            )
+            .unwrap();
+
+        assert_eq!(remain.len(), 0);
+        assert_eq!(headers.len(), 3);
+        assert_eq!(headers[0].key, b"Subject");
+        assert_eq!(headers[0].value, b"This is a test email");
+        assert_eq!(headers[1].key, b"Content-Type");
+        assert_eq!(headers[1].value, b"multipart/alternative; boundary=foobar");
+        assert_eq!(headers[2].key, b"Date");
+        assert_eq!(headers[2].value, b"Sun, 02 Oct 2016 07:06:22 -0700 (PDT)");
     }
 }
