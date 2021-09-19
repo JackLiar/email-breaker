@@ -5,20 +5,10 @@ use nom::error::{make_error, ErrorKind};
 use nom::number::complete::u8;
 use nom::IResult;
 
-#[derive(Debug)]
-pub struct MailHeader<'a> {
-    pub key: &'a [u8],
-    pub value: &'a [u8],
-}
+mod header;
+pub mod utils;
 
-impl<'a> Default for MailHeader<'a> {
-    fn default() -> Self {
-        Self {
-            key: &[],
-            value: &[],
-        }
-    }
-}
+pub use header::{MailHeader, MailHeaderMap};
 
 #[derive(Clone, Debug, Default)]
 pub struct EmailBreaker {
