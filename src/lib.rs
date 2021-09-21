@@ -1,3 +1,5 @@
+pub use nom;
+use nom::bytes::complete::tag;
 use nom::bytes::streaming::{take, take_till1};
 use nom::character::complete::{line_ending, multispace0, not_line_ending};
 use nom::character::is_newline;
@@ -92,6 +94,26 @@ impl EmailBreaker {
 
         Ok((data, headers))
     }
+
+    pub fn parse_body<'a, 'b>(
+        &'a self,
+        data: &'b [u8],
+        header: &'b MailHeader,
+    ) -> IResult<&'b [u8], ()> {
+        let (data, _) = tag(b"--")(data)?;
+
+        Ok((&[], ()))
+    }
+
+    pub fn parse_multipart_body<'a, 'b>(
+        &'a self,
+        data: &'b [u8],
+        header: &'b MailHeader,
+    ) -> IResult<&'b [u8], ()> {
+        let (data, _) = tag(b"--")(data)?;
+
+        Ok((&[], ()))
+    }
 }
 
 #[cfg(test)]
@@ -149,5 +171,10 @@ mod test {
         assert_eq!(headers[1].value, b"multipart/alternative; boundary=foobar");
         assert_eq!(headers[2].key, b"Date");
         assert_eq!(headers[2].value, b"Sun, 02 Oct 2016 07:06:22 -0700 (PDT)");
+    }
+
+    #[test]
+    fn parse_body() {
+        let breaker = EmailBreaker::default();
     }
 }
